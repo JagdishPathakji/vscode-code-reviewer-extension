@@ -2,7 +2,7 @@
   "name": "code-reviewer-by-jagdish",
   "displayName": "AI Code Reviewer by Jagdish",
   "description": "AI-powered folder code review",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "JagdishPathakji",
   "engines": {
     "vscode": "^1.107.0"
