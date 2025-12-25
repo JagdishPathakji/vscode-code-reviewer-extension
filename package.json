@@ -1,0 +1,54 @@
+{
+  "name": "code-reviewer",
+  "displayName": "AI Code Reviewer",
+  "description": "AI-powered folder code review",
+  "version": "0.0.1",
+  "publisher": "Jagdish Pathakji",
+  "engines": {
+    "vscode": "^1.107.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:code-reviewer.reviewFolder"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "code-reviewer.reviewFolder",
+        "title": "AI Code Reviewer"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "code-reviewer.reviewFolder",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "pretest": "npm run lint",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@types/vscode": "^1.107.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^9.39.1"
+  },
+  "dependencies": {
+    "@google/genai": "^1.34.0",
+    "@langchain/google-genai": "^2.1.3",
+    "dotenv": "^17.2.3",
+    "zod": "^4.2.1"
+  },
+  "type": "commonjs"
+}

@@ -1,0 +1,21 @@
+# Node modules
+node_modules/
+
+# VS Code local history
+.history/
+
+# VS Code settings and workspace
+.vscode/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# NPM package lock (optional)
+package-lock.json
+
+# Environment files
+.env
