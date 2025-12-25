@@ -7,6 +7,11 @@
   "engines": {
     "vscode": "^1.107.0"
   },
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JagdishPathakji/vscode-code-reviewer-extension.git"
+  },
   "categories": [
     "Other"
   ],
