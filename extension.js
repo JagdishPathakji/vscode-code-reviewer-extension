@@ -11,7 +11,7 @@ async function activate(context) {
 	const { GoogleGenAI } = await import("@google/genai");
 
 	const disposable = vscode.commands.registerCommand(
-		"code-reviewer.reviewFolder",
+		"code-reviewer-by-jagdish.reviewFolder",
 		async (uri) => {
 			if (!uri) {
 				vscode.window.showErrorMessage("No folder selected");

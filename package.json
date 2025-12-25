@@ -1,9 +1,9 @@
 {
-  "name": "code-reviewer",
-  "displayName": "AI Code Reviewer",
+  "name": "code-reviewer-by-jagdish",
+  "displayName": "AI Code Reviewer by Jagdish",
   "description": "AI-powered folder code review",
   "version": "0.0.1",
-  "publisher": "Jagdish Pathakji",
+  "publisher": "JagdishPathakji",
   "engines": {
     "vscode": "^1.107.0"
   },
@@ -16,25 +16,25 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:code-reviewer.reviewFolder"
+    "onCommand:code-reviewer-by-jagdish.reviewFolder"
   ],
   "main": "./extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "code-reviewer.reviewFolder",
-        "title": "AI Code Reviewer"
+        "command": "code-reviewer-by-jagdish.reviewFolder",
+        "title": "AI Code Reviewer by Jagdish"
       }
     ],
-    "menus": {
-      "explorer/context": [
-        {
-          "command": "code-reviewer.reviewFolder",
-          "when": "explorerResourceIsFolder",
-          "group": "navigation"
-        }
-      ]
-    }
+  "menus": {
+    "explorer/context": [
+      {
+        "command": "code-reviewer-by-jagdish.reviewFolder",
+        "when": "explorerResourceIsFolder",
+        "group": "navigation"
+      }
+    ]
+  }
   },
   "scripts": {
     "lint": "eslint .",
