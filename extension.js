@@ -150,10 +150,9 @@ async function activate(context) {
 						outputChannel.appendLine(`Error in ${file}: ${error}`);
 					}
 				}
-			});
 
-			await context.secrets.delete('geminiApiKey');
-			vscode.window.showInformationMessage("AI Review complete 🥳");
+				vscode.window.showInformationMessage("AI Review complete 🥳");
+			});
 		}
 	);
 
