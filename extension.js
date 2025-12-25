@@ -25,7 +25,12 @@ async function activate(context) {
 			if (!apiKey) return;
 
 			const ai = new GoogleGenAI({ apiKey });
-			const folderPath = uri.fsPath;
+			const folderPath = uri?.fsPath || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+						
+			if (!folderPath) {
+				vscode.window.showErrorMessage("No folder selected and no workspace folder open");
+				return;
+			}
 
 			const files = getFiles({ dir: folderPath });
 			outputChannel.appendLine(`Files found: ${files.length}`);
