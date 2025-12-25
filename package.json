@@ -29,12 +29,18 @@
   "menus": {
       "explorer/context": [
         {
-          "command": "code-reviewer.reviewFolder",
-          "when": "explorerResourceIsFolder || resourceWorkspaceFolder",
+          "command": "code-reviewer-by-jagdish.reviewFolder",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation"
+        },
+        {
+          "command": "code-reviewer-by-jagdish.reviewFolder",
+          "when": "resourceWorkspaceFolder",
           "group": "navigation"
         }
       ]
     }
+
   },
   "scripts": {
     "lint": "eslint .",
