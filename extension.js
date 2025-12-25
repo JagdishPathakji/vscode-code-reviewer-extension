@@ -18,9 +18,6 @@ async function activate(context) {
 				return;
 			}
 
-			const outputChannel = vscode.window.createOutputChannel("Code Reviewer");
-			outputChannel.show(true);
-
 			const apiKey = await getOrPromptApiKey(context);
 			if (!apiKey) return;
 
@@ -33,7 +30,6 @@ async function activate(context) {
 			}
 
 			const files = getFiles({ dir: folderPath });
-			outputChannel.appendLine(`Files found: ${files.length}`);
 
 			const originalUri = vscode.Uri.parse("untitled:AI_REVIEW.original");
 			const modifiedUri = vscode.Uri.parse("untitled:AI_REVIEW.ai");
@@ -90,7 +86,7 @@ async function activate(context) {
 						const modified = result.text;
 
 						if (!modified || modified.trim() === original.trim()) {
-							outputChannel.appendLine(`No changes for ${file}`);
+							vscode.window.showInformationMessage(`No changes for ${file}`);
 							continue;
 						}
 
@@ -127,6 +123,7 @@ async function activate(context) {
 						}
 
 					} catch (error) {
+						vscode.window.showInformationMessage(`Error in ${file}: ${error}`);
 						if(error.status == 429) {
 							vscode.window.showErrorMessage(`Error occured : API Limit Reached`);
 							return;
@@ -147,11 +144,13 @@ async function activate(context) {
 							vscode.window.showErrorMessage("Server problem from Gemini side");
 							return;
 						}
-						outputChannel.appendLine(`Error in ${file}: ${error}`);
+						else {
+							return;
+						}
 					}
 				}
 
-				vscode.window.showInformationMessage("AI Review complete 🥳");
+				vscode.window.showInformationMessage("AI Review completed 🥳");
 			});
 		}
 	);
