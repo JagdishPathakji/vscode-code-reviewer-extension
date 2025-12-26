@@ -43,6 +43,11 @@ function getFiles({ dir }) {
 		"obj"
 	];
 
+	const ignoreFiles = [
+		"package.json",
+		"package-lock.json"
+	];
+
 	let items;
 	try {
 		items = fs.readdirSync(dir);
@@ -63,6 +68,7 @@ function getFiles({ dir }) {
 
 	for (const item of items) {
 		if (ignoreDirs.includes(item)) continue;
+		if (ignoreFiles.includes(item)) continue; 
 
 		const fullpath = path.join(dir, item);
 
