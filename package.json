@@ -30,12 +30,7 @@
       "explorer/context": [
         {
           "command": "code-reviewer-by-jagdish.reviewFolder",
-          "when": "explorerResourceIsFolder",
-          "group": "navigation"
-        },
-        {
-          "command": "code-reviewer-by-jagdish.reviewFolder",
-          "when": "resourceWorkspaceFolder",
+          "when": "resource",
           "group": "navigation"
         }
       ]

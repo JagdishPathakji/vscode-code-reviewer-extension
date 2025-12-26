@@ -34,14 +34,35 @@ async function activate(context) {
 			const outputChannel = vscode.window.createOutputChannel("AI Reviewer");
 			outputChannel.show(true);
 
-			const folderPath = uri?.fsPath || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+			// const folderPath = uri?.fsPath || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 						
-			if (!folderPath) {
-				vscode.window.showErrorMessage("No folder selected and no workspace folder open");
+			// if (!folderPath) {
+			// 	vscode.window.showErrorMessage("No folder selected and no workspace folder open");
+			// 	return;
+			// }
+			// const files = getFiles({ dir: folderPath });
+
+
+			const selectedPath = uri?.fsPath;
+			if (!selectedPath) {
+				vscode.window.showErrorMessage("No folder or file selected");
 				return;
 			}
 
-			const files = getFiles({ dir: folderPath });
+			let files = [];
+			try {
+				const stat = await vscode.workspace.fs.stat(vscode.Uri.file(selectedPath));
+				if(stat.type===vscode.FileType.Directory) {
+					files = getFiles({dir:selectedPath})
+				}
+				else {
+					files = [selectedPath]
+				}
+			}
+			catch(error) {
+				vscode.window.showErrorMessage(`Unable to access: ${selectedPath}`);
+    			return;
+			}
 
 			const originalUri = vscode.Uri.parse("untitled:AI_REVIEW.original");
 			const modifiedUri = vscode.Uri.parse("untitled:AI_REVIEW.ai");
