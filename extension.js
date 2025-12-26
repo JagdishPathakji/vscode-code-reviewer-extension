@@ -2,13 +2,15 @@ const vscode = require("vscode");
 const getFiles = require("./getFiles.js");
 const readFile = require("./readFile.js");
 const writeFile = require("./writeFile.js");
+const path = require("path");
 
 /**
  * @param {vscode.ExtensionContext} context
  */
 
 async function activate(context) {
-	const { GoogleGenAI } = await import("@google/genai");
+
+	const { Ollama } = await import("ollama")
 
 	const disposable = vscode.commands.registerCommand(
 		"code-reviewer-by-jagdish.reviewFolder",
@@ -18,10 +20,20 @@ async function activate(context) {
 				return;
 			}
 
-			const apiKey = await getOrPromptApiKey(context);
+			const apiKey = await getApiKeyWithChoice(context);
 			if (!apiKey) return;
 
-			const ai = new GoogleGenAI({ apiKey });
+			
+			const ollama = new Ollama({
+				host: "https://ollama.com",
+				headers: {
+					Authorization: "Bearer " + apiKey,
+				},
+			});
+
+			const outputChannel = vscode.window.createOutputChannel("AI Reviewer");
+			outputChannel.show(true);
+
 			const folderPath = uri?.fsPath || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 						
 			if (!folderPath) {
@@ -41,6 +53,7 @@ async function activate(context) {
 				cancellable: true
 			}, async (progress, token) => {
 
+				outputChannel.appendLine("AI Reviewer extension activated");
 				for (let i = 0; i < files.length; i++) {
 					const file = files[i];
 
@@ -53,40 +66,44 @@ async function activate(context) {
 					if(!original) continue;
 
 					progress.report({ message: `Reviewing: ${file}`, increment: (1 / files.length) * 100 });
-
+					const baseName = path.basename(file);
 					try {
-						const result = await ai.models.generateContent({
-							model: "gemini-2.5-flash-lite",
-							config: {
-								systemInstruction: `
-								You are an code reviewer and bug fixer.
-								You are here to solve errors and bugs in the code provided to you.
-								You have to resolve bugs, errors, possible execeptions, etc.
-								You have to solve syntax or logical errors if present in the code.
-								You have to properly anaylze the code and fix the code.
-								Add comments of whatever changes you have made to the file.
-								*Return only the improved code version*.
-								`
-							},
-							contents: [
+						
+						outputChannel.appendLine(`Analyzing your file : ${baseName}`);
+						const response = await ollama.chat({
+							model: "gpt-oss:120b-cloud",
+							messages: [
 								{
-									role: "user",
-									parts: [
-										{
-											text: `Review and improve this file.
-											Return ONLY the full improved code.
-											FILE PATH: ${file}
-											CODE:${original}`
-										}
-									]
+									role:"system",
+									content: `
+									SystemInstruction : You are an code reviewer and bug fixer.
+									You are here to solve errors and bugs in the code provided to you.
+									You have to resolve bugs, errors, possible execeptions, etc.
+									You have to solve syntax or logical errors if present in the code.
+									You have to properly anaylze the code and fix the code.
+									Add comments of whatever changes you have made to the file.
+									*Return only the improved code version*.
+									`
+								},
+								{ 
+									role: "user", 
+									content: `
+									Review and improve this file. Return ONLY the full improved code. 
+									FILE PATH: ${file} CODE:${original}
+									`
 								}
-							]
+						],
+							stream: true
 						});
-
-						const modified = result.text;
+						
+						outputChannel.appendLine("☺️ Your improved version of file is ready");
+						let modified = ""
+						for await (const part of response) {
+							modified += part.message.content;
+						}
 
 						if (!modified || modified.trim() === original.trim()) {
-							vscode.window.showInformationMessage(`No changes for ${file}`);
+							vscode.window.showInformationMessage(`No changes for ${baseName}`);
 							continue;
 						}
 
@@ -101,7 +118,7 @@ async function activate(context) {
 							"vscode.diff",
 							originalUri,
 							modifiedUri,
-							`AI Review`
+							`AI Review: ${baseName}`
 						);
 
 						const choice = await vscode.window.showQuickPick(
@@ -113,44 +130,28 @@ async function activate(context) {
 						);
 
 						if (choice === "Apply") {
+							outputChannel.appendLine(`Changes saved successfully for file : ${baseName}`);
 							writeFile({
 								path: file,
 								content: cleanCodeFences(modified)
 							});
-							vscode.window.showInformationMessage(`Applied changes to ${file}`);
+							vscode.window.showInformationMessage(`Applied changes to ${baseName}`);
 						} else {
+							outputChannel.appendLine(`Skipping the changes for file : ${baseName}`);
 							vscode.window.showInformationMessage(`Skipped ${file}`);
 						}
 
 					} catch (error) {
+						outputChannel.appendLine(`Unexpected Error Occured`);
 						vscode.window.showInformationMessage(`Error in ${file}: ${error}`);
-						if(error.status == 429) {
-							vscode.window.showErrorMessage(`Error occured : API Limit Reached`);
-							return;
-						}
-						else if(error.status === 401) {
-							vscode.window.showErrorMessage(`Error occured : Invalid API Key Provided`);
-							return;
-						}
-						else if(error.status === 403) {
-							vscode.window.showErrorMessage("Gemini API access forbidden. Check API enablement or billing.");
-							return;
-						}
-						else if(error.status === 413) {
-							vscode.window.showWarningMessage(`Skipping large file: ${file}`);
-							continue;
-						}
-						else if(error.status >= 500) {
-							vscode.window.showErrorMessage("Server problem from Gemini side");
-							return;
-						}
-						else {
-							return;
-						}
+						return
 					}
 				}
-
-				vscode.window.showInformationMessage("AI Review completed 🥳");
+				
+				vscode.window.showInformationMessage("AI Review Completed Successfully");
+				outputChannel.appendLine("Closing temporary AI editors...");
+				await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+				outputChannel.dispose();
 			});
 		}
 	);
@@ -170,20 +171,53 @@ function cleanCodeFences(code) {
 		.trim();
 }
 
-async function getOrPromptApiKey(context) {
-	let apiKey = await context.secrets.get("geminiApiKey");
-	if (!apiKey) {
-		apiKey = await vscode.window.showInputBox({
-			prompt:
-				"Enter your Google Gemini API Key. Generate one from: https://aistudio.google.com/api-keys",
-			ignoreFocusOut: true,
-			password: true
-		});
-		if (!apiKey) return null;
-		await context.secrets.store("geminiApiKey", apiKey);
+async function getApiKeyWithChoice(context) {
+	let apiKey = await context.secrets.get("OLLAMA_API_KEY");
+
+  	// First time user → no choice needed
+  	if(!apiKey) {
+    	apiKey = await vscode.window.showInputBox({
+      		prompt: "Enter your Ollama API Key",
+      		password: true,
+      		ignoreFocusOut: true
+    	});
+
+		if (!apiKey) {
+		throw new Error("API key is required to continue");
+		}
+
+		await context.secrets.store("OLLAMA_API_KEY", apiKey.trim());
+		return apiKey.trim();
 	}
-	return apiKey;
+
+  	// Ask user whether to reuse or replace
+  	const choice = await vscode.window.showQuickPick(
+    	["Use saved API key", "Enter a new API key"],
+    	{
+      		placeHolder: "Choose which API key to use",
+      		ignoreFocusOut: true
+    	}
+  	);
+
+  	if(choice === "Enter a new API key") {
+    	const newKey = await vscode.window.showInputBox({
+      		prompt: "Enter new Ollama API Key",
+      		password: true,
+      		ignoreFocusOut: true
+    	});
+
+    	if(!newKey) {
+      		throw new Error("API key is required to continue");
+    	}
+
+    	await context.secrets.store("OLLAMA_API_KEY", newKey.trim());
+    	return newKey.trim();
+  	}
+
+  	// Default: use saved key
+  	return apiKey;
 }
+
 
 function deactivate() {}
 
