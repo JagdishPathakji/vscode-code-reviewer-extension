@@ -198,7 +198,7 @@ async function getApiKeyWithChoice(context) {
   	// First time user → no choice needed
   	if(!apiKey) {
     	apiKey = await vscode.window.showInputBox({
-      		prompt: "Enter your Ollama API Key",
+      		prompt: "Enter your Ollama API Key. Get it from : https://ollama.com/settings/keys",
       		password: true,
       		ignoreFocusOut: true
     	});
