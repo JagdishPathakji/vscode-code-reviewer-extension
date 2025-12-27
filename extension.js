@@ -7,10 +7,9 @@ const path = require("path");
 /**
  * @param {vscode.ExtensionContext} context
  */
-
 async function activate(context) {
 
-	const { Ollama } = await import("ollama")
+	const { Ollama } = await import("ollama");
 
 	const disposable = vscode.commands.registerCommand(
 		"code-reviewer-by-jagdish.reviewFolder",
@@ -23,7 +22,6 @@ async function activate(context) {
 			const apiKey = await getApiKeyWithChoice(context);
 			if (!apiKey) return;
 
-			
 			const ollama = new Ollama({
 				host: "https://ollama.com",
 				headers: {
@@ -34,15 +32,6 @@ async function activate(context) {
 			const outputChannel = vscode.window.createOutputChannel("AI Reviewer");
 			outputChannel.show(true);
 
-			// const folderPath = uri?.fsPath || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-						
-			// if (!folderPath) {
-			// 	vscode.window.showErrorMessage("No folder selected and no workspace folder open");
-			// 	return;
-			// }
-			// const files = getFiles({ dir: folderPath });
-
-
 			const selectedPath = uri?.fsPath;
 			if (!selectedPath) {
 				vscode.window.showErrorMessage("No folder or file selected");
@@ -50,23 +39,37 @@ async function activate(context) {
 			}
 
 			let files = [];
+
+			const reviewMode = await vscode.window.showQuickPick(
+				[
+					"🧠 Full Review",
+					"🐞 Bug Fix Only",
+					"⚡ Performance Optimization",
+					"🔐 Security Review",
+					"🧹 Code Cleanup / Refactor",
+				],
+				{
+					placeHolder: "Select AI Review Mode",
+					ignoreFocusOut: true
+				}
+			);
+
+			if (!reviewMode) return;
+
 			try {
 				const stat = await vscode.workspace.fs.stat(vscode.Uri.file(selectedPath));
-				if(stat.type===vscode.FileType.Directory) {
-					files = getFiles({dir:selectedPath})
+				if (stat.type === vscode.FileType.Directory) {
+					files = getFiles({ dir: selectedPath });
+				} else {
+					files = [selectedPath];
 				}
-				else {
-					files = [selectedPath]
-				}
-			}
-			catch(error) {
+			} catch {
 				vscode.window.showErrorMessage(`Unable to access: ${selectedPath}`);
-    			return;
+				return;
 			}
 
 			const originalUri = vscode.Uri.parse("untitled:AI_REVIEW.original");
 			const modifiedUri = vscode.Uri.parse("untitled:AI_REVIEW.ai");
-
 
 			await vscode.window.withProgress({
 				location: vscode.ProgressLocation.Notification,
@@ -74,7 +77,20 @@ async function activate(context) {
 				cancellable: true
 			}, async (progress, token) => {
 
-				outputChannel.appendLine("AI Reviewer extension activated");
+				// ===== OUTPUT HEADER =====
+				outputChannel.appendLine("══════════════════════════════════════════════");
+				outputChannel.appendLine("🚀 AI CODE REVIEW SESSION STARTED");
+				outputChannel.appendLine(`🧠 Review Mode : ${reviewMode}`);
+				outputChannel.appendLine(`📂 Total Files : ${files.length}`);
+				outputChannel.appendLine("══════════════════════════════════════════════");
+
+				let summaryStats = {
+					filesReviewed: 0,
+					filesModified: 0,
+					skipped: 0,
+					errors: 0,
+				};
+
 				for (let i = 0; i < files.length; i++) {
 					const file = files[i];
 
@@ -84,44 +100,45 @@ async function activate(context) {
 					}
 
 					const original = readFile({ path: file })?.content || null;
-					if(!original) continue;
+					if (!original) continue;
 
-					progress.report({ message: `Reviewing: ${file}`, increment: (1 / files.length) * 100 });
+					progress.report({
+						message: `Reviewing: ${file}`,
+						increment: (1 / files.length) * 100
+					});
+
 					const baseName = path.basename(file);
+
 					try {
-						
-						outputChannel.appendLine(`Analyzing your file : ${baseName}`);
+						summaryStats.filesReviewed++;
+						outputChannel.appendLine(`🔍 Reviewing file → ${baseName}`);
+
 						const response = await ollama.chat({
 							model: "gpt-oss:120b-cloud",
 							messages: [
 								{
-									role:"system",
-									content: `
-									SystemInstruction : You are an code reviewer and bug fixer.
-									You are here to solve errors and bugs in the code provided to you.
-									You have to resolve bugs, errors, possible execeptions, etc.
-									You have to solve syntax or logical errors if present in the code.
-									You have to properly anaylze the code and fix the code.
-									Add comments of whatever changes you have made to the file.
-									*Return only the improved code version*.
-									`
+									role: "system",
+									content: getSystemPromptByMode(reviewMode)
 								},
-								{ 
-									role: "user", 
+								{
+									role: "user",
 									content: `
-									Review and improve this file. Return ONLY the full improved code. 
-									FILE PATH: ${file} CODE:${original}
+										Review and improve this file. Return ONLY the full improved code.
+										FILE PATH: ${file}
+										CODE:
+										${original}
 									`
 								}
-						],
+							],
 							stream: true
 						});
-						
-						outputChannel.appendLine("☺️ Your improved version of file is ready");
-						let modified = ""
+
+						let modified = "";
 						for await (const part of response) {
 							modified += part.message.content;
 						}
+
+						outputChannel.appendLine(`✨ AI suggestions generated for ${baseName}`);
 
 						if (!modified || modified.trim() === original.trim()) {
 							vscode.window.showInformationMessage(`No changes for ${baseName}`);
@@ -151,28 +168,76 @@ async function activate(context) {
 						);
 
 						if (choice === "Apply") {
-							outputChannel.appendLine(`Changes saved successfully for file : ${baseName}`);
+							summaryStats.filesModified++;
 							writeFile({
 								path: file,
 								content: cleanCodeFences(modified)
 							});
+							outputChannel.appendLine(`✅ Changes applied → ${baseName}`);
 							vscode.window.showInformationMessage(`Applied changes to ${baseName}`);
 						} else {
-							outputChannel.appendLine(`Skipping the changes for file : ${baseName}`);
-							vscode.window.showInformationMessage(`Skipped ${file}`);
+							summaryStats.skipped++;
+							outputChannel.appendLine(`⏭ Changes skipped → ${baseName}`);
+							vscode.window.showInformationMessage(`⏭ Skipped ${file}`);
 						}
 
 					} catch (error) {
-						outputChannel.appendLine(`Unexpected Error Occured`);
-						vscode.window.showInformationMessage(`Error in ${file}: ${error}`);
-						return
+						outputChannel.appendLine("❌ Ollama Error Detected");
+						outputChannel.appendLine("--------------------------------");
+
+						outputChannel.appendLine(`Message: ${error.message || "No message"}`);
+
+						if (error.status) {
+							outputChannel.appendLine(`HTTP Status: ${error.status}`);
+						}
+
+						if (error.response) {
+							outputChannel.appendLine("Response:");
+							outputChannel.appendLine(JSON.stringify(error.response, null, 2));
+						}
+
+						if (error.stack) {
+							outputChannel.appendLine("Stack Trace:");
+							outputChannel.appendLine(error.stack);
+						}
+
+						outputChannel.appendLine("--------------------------------");
+
+						vscode.window.showErrorMessage(
+							"AI Review failed. See 'AI Reviewer' output for details."
+						);
+
+						summaryStats.errors++;
+						continue; 
 					}
 				}
-				
-				vscode.window.showInformationMessage("AI Review Completed Successfully");
-				outputChannel.appendLine("Closing temporary AI editors...");
+
+				const summary = `
+					🧠 AI REVIEW SUMMARY
+					\n
+					📂 Files Reviewed : ${summaryStats.filesReviewed}
+					\n
+					✅ Files Modified : ${summaryStats.filesModified}
+					\n
+					⏭ Files Skipped  : ${summaryStats.skipped}
+					\n
+					❌ Errors        : ${summaryStats.errors}
+					\n
+					🎯 Review Mode   : ${reviewMode}
+					\n
+					🚀 Status        : Completed Successfully
+				`;
+
+				outputChannel.appendLine("══════════════════════════════════════════════");
+				outputChannel.appendLine("📊 AI REVIEW SUMMARY");
+				outputChannel.appendLine("══════════════════════════════════════════════");
+				outputChannel.appendLine(summary);
+				outputChannel.appendLine("══════════════════════════════════════════════");
+
+
+				vscode.window.showInformationMessage("🎉 AI Review Completed Successfully");
+				outputChannel.appendLine("🧹 Cleaning up temporary AI editors...");
 				await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-				outputChannel.dispose();
 			});
 		}
 	);
@@ -180,10 +245,60 @@ async function activate(context) {
 	context.subscriptions.push(disposable);
 }
 
+/* ================= HELPERS ================= */
 
-/**
- * Helpers
- */
+function getSystemPromptByMode(mode) {
+	const baseRules = `
+		You are an expert senior software engineer acting as an automated code reviewer.
+
+		STRICT RULES:
+		- Return ONLY the full improved source code.
+		- Do NOT include explanations outside code comments.
+		- Do NOT wrap output in markdown or code fences.
+		- Preserve existing functionality unless explicitly required.
+		- Add concise comments ONLY where changes are made.
+		- If no improvements are needed, return the original code unchanged.
+	`;
+
+	switch (mode) {
+		case "🐞 Bug Fix Only":
+			return `${baseRules}
+			TASK:
+			- Identify and fix syntax errors, runtime errors, and logical bugs.
+			- Fix potential crashes and unhandled exceptions.
+			- Do NOT refactor, optimize, or rename variables unless required.
+		`;
+		
+		case "⚡ Performance Optimization":
+			return `${baseRules}
+			TASK:
+			- Improve time and space efficiency.
+			- Remove unnecessary computations or memory usage.
+			- Keep behavior exactly the same.
+		`;
+		
+		case "🔐 Security Review":
+			return `${baseRules}
+			TASK:
+			- Fix security vulnerabilities and unsafe patterns.
+			- Prevent injections, leaks, and insecure API usage.
+		`;
+		
+		case "🧹 Code Cleanup / Refactor":
+			return `${baseRules}
+			TASK:
+			- Improve readability and maintainability.
+			- Simplify code without changing behavior.
+		`;
+
+		default:
+			return `${baseRules}
+			TASK:
+			- Fix bugs, improve performance and security.
+			- Improve readability with minimal changes.
+		`;
+	}
+}
 
 function cleanCodeFences(code) {
 	return code
@@ -195,216 +310,36 @@ function cleanCodeFences(code) {
 async function getApiKeyWithChoice(context) {
 	let apiKey = await context.secrets.get("OLLAMA_API_KEY");
 
-  	// First time user → no choice needed
-  	if(!apiKey) {
-    	apiKey = await vscode.window.showInputBox({
-      		prompt: "Enter your Ollama API Key. Get it from : https://ollama.com/settings/keys",
-      		password: true,
-      		ignoreFocusOut: true
-    	});
-
-		if (!apiKey) {
-		throw new Error("API key is required to continue");
-		}
-
+	if (!apiKey) {
+		apiKey = await vscode.window.showInputBox({
+			prompt: "Enter your Ollama API Key. Get it from : https://ollama.com/settings/keys",
+			password: true,
+			ignoreFocusOut: true
+		});
+		if (!apiKey) throw new Error("API key is required");
 		await context.secrets.store("OLLAMA_API_KEY", apiKey.trim());
 		return apiKey.trim();
 	}
 
-  	// Ask user whether to reuse or replace
-  	const choice = await vscode.window.showQuickPick(
-    	["Use saved API key", "Enter a new API key"],
-    	{
-      		placeHolder: "Choose which API key to use",
-      		ignoreFocusOut: true
-    	}
-  	);
+	const choice = await vscode.window.showQuickPick(
+		["Use saved API key", "Enter a new API key"],
+		{ ignoreFocusOut: true }
+	);
 
-  	if(choice === "Enter a new API key") {
-    	const newKey = await vscode.window.showInputBox({
-      		prompt: "Enter new Ollama API Key",
-      		password: true,
-      		ignoreFocusOut: true
-    	});
+	if (choice === "Enter a new API key") {
+		const newKey = await vscode.window.showInputBox({
+			prompt: "Enter new Ollama API Key",
+			password: true,
+			ignoreFocusOut: true
+		});
+		if (!newKey) throw new Error("API key is required");
+		await context.secrets.store("OLLAMA_API_KEY", newKey.trim());
+		return newKey.trim();
+	}
 
-    	if(!newKey) {
-      		throw new Error("API key is required to continue");
-    	}
-
-    	await context.secrets.store("OLLAMA_API_KEY", newKey.trim());
-    	return newKey.trim();
-  	}
-
-  	// Default: use saved key
-  	return apiKey;
+	return apiKey;
 }
-
 
 function deactivate() {}
 
-module.exports = {
-	activate,
-	deactivate
-};
-
-
-
-
-
-// second way : 
-
-// const vscode = require("vscode");
-// const getFiles = require("./getFiles.js");
-// const readFile = require("./readFile.js");
-// const writeFile = require("./writeFile.js");
-// const z = require("zod")
-// const { ChatGoogleGenerativeAI } = require("@langchain/google-genai");
-// const { PromptTemplate } = require("@langchain/core/prompts");
-
-// /**
-//  * @param {vscode.ExtensionContext} context
-// */
-// async function activate(context) {
-	
-//     const disposable = vscode.commands.registerCommand(
-//         'code-reviewer.reviewFolder',
-//         async (uri) => {
-
-//             if (!uri) {
-//                 vscode.window.showErrorMessage("No folder selected");
-//                 return;
-//             }
-
-// 			const outputChannel = vscode.window.createOutputChannel("Code Reviewer");
-// 			outputChannel.show(true);
-
-//             const apiKey = await getOrPromptApiKey(context);
-//             if (!apiKey) return;
-
-//             const folderPath = uri.fsPath;
-
-//             vscode.window.showInformationMessage(`Selected Folder: ${folderPath}`);
-//             vscode.window.showInformationMessage(`Your API Key : ${apiKey}`);	
-			
-//             const model = new ChatGoogleGenerativeAI({
-//                 apiKey: apiKey,
-//                 model: "gemini-2.5-flash-lite",
-//                 temperature: 0
-//             });
-
-// 			const structure = z.object({
-//                 content: z.string()           
-// 			});
-
-//             const prompt = PromptTemplate.fromTemplate(
-//                 `
-//                 You are an AI code reviewer. 
-//                 You will be given a code of file (any programming languages).
-//                 You have to analyze the code proper.
-//                 You have to suggest new proper code with :
-//                 - Bugs removed
-//                 - Errors removed
-//                 - Handled possible exceptions
-//                 - Solve logical errors
-//                 - Solve syntax errors
-//                 - Basically improve the code
-//                 Return the final improved code in proper manner.
-//                 `
-//             );
-
-// 			const files = getFiles({dir: folderPath})
-// 			for(const file of files) {
-
-// 				const original = readFile({path:file}).content
-				
-// 				try {
-
-// 					outputChannel.appendLine(`got file content`)
-
-// 					const structuredOutput = model.withStructuredOutput(structure)
-// 					const answer = await structuredOutput.invoke("System Prompt : "+prompt + "\nUser Prompt" + `Code to improve : ${original}`)
-					
-// 					outputChannel.appendLine(`llm call complete`)
-
-// 					const modified = answer.content
-// 					if (!modified || modified.trim() === original.trim()) {
-// 						vscode.window.showInformationMessage(`No changes for ${file}`);
-// 						continue;
-// 					}
-					
-// 					const originalUri = vscode.Uri.parse(`untitled:${file}.original`);
-// 					const modifiedUri = vscode.Uri.parse(`untitled:${file}.ai`);
-	
-// 					// Create original
-// 					const originalEdit = new vscode.WorkspaceEdit();
-// 					originalEdit.insert(originalUri, new vscode.Position(0, 0), original);
-// 					await vscode.workspace.applyEdit(originalEdit);
-	
-// 					// Create modified
-// 					const modifiedEdit = new vscode.WorkspaceEdit();
-// 					modifiedEdit.insert(modifiedUri, new vscode.Position(0, 0), modified);
-// 					await vscode.workspace.applyEdit(modifiedEdit);
-	
-// 					// Show diff ONLY
-// 					await vscode.commands.executeCommand(
-// 						"vscode.diff",
-// 						originalUri,
-// 						modifiedUri,
-// 						`AI Review: ${file}`
-// 					)
-	
-// 					const choice = await vscode.window.showQuickPick(
-// 						["Apply", "Skip"],
-// 						{
-// 							placeHolder: `Apply AI changes to ${file}?`,
-// 							ignoreFocusOut: true
-// 						}
-// 					);
-	
-// 					if(choice == "Apply") {
-// 						writeFile({path:file,content:modified})
-// 						vscode.window.showInformationMessage(`Changes applied to ${file}`);
-// 					}
-// 					else {
-// 						vscode.window.showInformationMessage(`Skipped Changes for ${file}`);
-// 					}
-// 				}
-// 				catch(error) {
-// 					outputChannel.appendLine(`error : ${error}`)
-// 				}	
-// 			}
-
-// 			vscode.window.showInformationMessage(`AI Review complete 🥳`);
-// 		}
-//     );
-
-//     context.subscriptions.push(disposable);
-// }
-
-// /**
-//  * Prompt user for API key, and store/retrieve using VS Code SecretStorage
-//  * @param {vscode.ExtensionContext} context
-// */
-
-// async function getOrPromptApiKey(context) {
-//     let apiKey = await context.secrets.get('geminiApiKey');
-//     if (!apiKey) {
-//         apiKey = await vscode.window.showInputBox({
-//             prompt: "Enter your Google Gemini API Key. Generate one from : https://aistudio.google.com/api-keys (needed for reviewing you code)",
-//             ignoreFocusOut: true,
-//             password: true
-//         });
-//         if (!apiKey) return null;
-//         await context.secrets.store('geminiApiKey', apiKey);
-//     }
-//     return apiKey;
-// }
-
-// function deactivate() {
-	
-// }
-
-// module.exports = {
-// 	activate,
-// 	deactivate
-// }
+module.exports = { activate, deactivate };
