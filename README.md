@@ -2,6 +2,11 @@
 
 An **AI-powered VS Code extension** that reviews your codebase intelligently, detects bugs, improves performance, enhances security, and refactors code — **file by file with full diff preview and complete user control**.
 
+## Extension Link
+https://marketplace.visualstudio.com/items?itemName=JagdishPathakji.code-reviewer-by-jagdish
+
+## Direct Installation
+Search : AI Code Reviewer by Jagdish
 
 ## Features
 
